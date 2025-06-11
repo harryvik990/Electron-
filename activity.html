@@ -1,0 +1,15 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Activity Logs</title>
+</head>
+<body>
+    <h2>Your Activity Logs</h2>
+    <ul>
+    {% for log in logs %}
+        <li>{{ log.timestamp }} - {{ log.action }}</li>
+    {% endfor %}
+    </ul>
+    <p><a href="{{ url_for('dashboard') }}">Back to Dashboard</a></p>
+</body>
+</html>

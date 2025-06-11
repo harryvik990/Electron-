@@ -1,0 +1,140 @@
+// SPDX-License-Identifier: MIT
+pragma solidity ^0.8.0;
+
+import "./NonTransferableNFT.sol";  
+
+abstract contract ReentrancyGuard {
+    uint256 private constant NOT_ENTERED = 1;
+    uint256 private constant ENTERED = 2;
+    uint256 private _status;
+    error ReentrancyGuardReentrantCall();
+
+    constructor() {
+        _status = NOT_ENTERED;
+    }
+    modifier nonReentrant() {
+        _nonReentrantBefore();
+        _;
+        _nonReentrantAfter();
+    }
+
+    function _nonReentrantBefore() private {
+        if (_status == ENTERED) {
+            revert ReentrancyGuardReentrantCall();
+        }
+
+        _status = ENTERED;
+    }
+
+    function _nonReentrantAfter() private {
+        _status = NOT_ENTERED;
+    }
+
+    function _reentrancyGuardEntered() internal view returns (bool) {
+        return _status == ENTERED;
+    }
+}
+
+contract NftPool is Ownable, ReentrancyGuard{
+
+    address public genesisNFTAddress; 
+    address public communityNFTAddress;
+
+    NonTransferableNFT private genesisNFTContract; 
+    NonTransferableNFT private communityNFTContract; 
+
+    uint256 public genesisNFTPrice = 1 ether; 
+    uint256 public communityNFTPrice = 0.2 ether;
+
+    address payable public revenueReceiver;
+    bool public saleStatus = true;
+
+
+    event NFT1Purchased(address buyer, uint256 tokenId);
+    event NFT2Purchased(address buyer, uint256 tokenId);
+
+    modifier isSetReceiverWallet(){
+        require(revenueReceiver != address(0), "revenueReceiver address not set");
+        _;
+    }
+
+    constructor(address payable _revenueReceiver) Ownable(msg.sender){
+        genesisNFTContract = new NonTransferableNFT("Gold Meow", "Meow Motion Partner", address(this));
+        genesisNFTAddress = address(genesisNFTContract);
+
+        communityNFTContract = new NonTransferableNFT("Silver Meow", "Meow Motion Partner", address(this));
+        communityNFTAddress = address(communityNFTContract);
+
+        revenueReceiver = _revenueReceiver;
+
+    }
+
+    function canPurchaseNFT(address account) public view returns (bool) {
+        return genesisNFTContract.balanceOf(account) == 0 && communityNFTContract.balanceOf(account) == 0 && saleStatus;
+
+    }
+
+    function buyGenesisNFT() external payable nonReentrant isSetReceiverWallet{
+        
+
+        require(canPurchaseNFT(msg.sender),"Already own GenesisNFT or CommunityNFT, or the sale is closed");
+        require(msg.value == genesisNFTPrice, "Incorrect BNB amount sent.");
+        genesisNFTContract.mint(msg.sender);
+        revenueReceiver.transfer(msg.value);
+        emit NFT1Purchased(msg.sender, genesisNFTContract.tokenCounter() - 1);
+
+    }
+
+    function buyCommunityNFT() external payable nonReentrant isSetReceiverWallet{
+
+        require(canPurchaseNFT(msg.sender),"Already own GenesisNFT or CommunityNFT, or the sale is closed");
+        require(msg.value == communityNFTPrice, "Incorrect BNB amount sent.");
+        communityNFTContract.mint(msg.sender);
+        revenueReceiver.transfer(msg.value);
+        emit NFT2Purchased(msg.sender, communityNFTContract.tokenCounter() - 1);
+
+    }
+    function withdraw() external onlyOwner {
+        require(address(this).balance > 0, "Unavailable asset balance");
+        revenueReceiver.transfer(address(this).balance);
+    }
+
+    function getBalance() external view returns (uint256) {
+        return address(this).balance;
+    }
+
+    function getGenesisNFTBalance(address account) external view returns (uint256) {
+        return genesisNFTContract.balanceOf(account);
+    }
+    
+    function getCommunityNFTBalance(address account) external view returns (uint256) {
+        return communityNFTContract.balanceOf(account);
+    }
+
+    function getRevenueReceiver() external view returns (address){
+
+        return address(revenueReceiver);
+
+    }
+
+    function updateSaleStatus() external onlyOwner {
+        saleStatus = !saleStatus;
+    }
+
+    function updateRevenueReceiver(address payable _newReceiver) external onlyOwner {
+        require(_newReceiver != address(0), "Invalid address");
+        revenueReceiver = _newReceiver;
+    }
+
+    function setGenesisURL(string memory newURI) external onlyOwner{
+        
+        genesisNFTContract.setURIBase(newURI);
+
+    }
+
+    function setCommunityURL(string memory newURI) external onlyOwner{
+        
+        communityNFTContract.setURIBase(newURI);
+
+    }
+}
